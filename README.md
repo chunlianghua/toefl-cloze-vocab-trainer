@@ -30,7 +30,7 @@ setx ALIYUN_API_KEY "你的百炼 API Key"
 进入项目目录：
 
 ```powershell
-cd C:\Users\44156\Desktop\单词本
+cd path\to\toefl-cloze-vocab-trainer
 ```
 
 启动本地服务：
