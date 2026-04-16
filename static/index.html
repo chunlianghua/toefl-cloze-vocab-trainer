@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>26 新托福填词练习</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">TOEFL Vocabulary</p>
+        <h1>26 新托福填词练习</h1>
+      </div>
+      <div class="status-strip" aria-live="polite">
+        <span id="keyStatus" class="pill neutral">检查中</span>
+        <span id="countStatus" class="pill quiet">0 词 / 0 句</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="pane input-pane" aria-labelledby="addTitle">
+        <div class="section-title">
+          <h2 id="addTitle">录入单词</h2>
+          <label class="model-field">
+            <span>模型</span>
+            <input id="modelInput" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+
+        <textarea
+          id="wordInput"
+          rows="9"
+          spellcheck="false"
+          placeholder="输入多个单词，使用回车行作为间隔"
+        ></textarea>
+
+        <div class="action-row">
+          <button id="generateBtn" class="primary-btn" type="button">
+            <span class="btn-icon" aria-hidden="true">+</span>
+            生成并保存
+          </button>
+          <span id="generateState" class="muted" aria-live="polite"></span>
+        </div>
+
+        <div class="word-bank">
+          <div class="section-title compact">
+            <h2>词本</h2>
+            <button id="refreshBtn" class="icon-btn" type="button" title="刷新词本" aria-label="刷新词本">
+              ↻
+            </button>
+          </div>
+          <div id="wordList" class="word-list" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="pane practice-pane" aria-labelledby="practiceTitle">
+        <div class="section-title">
+          <h2 id="practiceTitle">记忆练习</h2>
+          <div class="practice-controls">
+            <div class="segmented" role="group" aria-label="练习模式">
+              <button class="mode-btn active" type="button" data-mode="recent">最近 n 词</button>
+              <button class="mode-btn" type="button" data-mode="random">随机 n 词</button>
+            </div>
+            <label class="number-field">
+              <span>n</span>
+              <input id="practiceCount" type="number" min="1" max="200" value="10" />
+            </label>
+            <button id="startPracticeBtn" class="secondary-btn" type="button">
+              <span class="btn-icon" aria-hidden="true">▶</span>
+              开始
+            </button>
+          </div>
+        </div>
+
+        <div id="emptyPractice" class="empty-state">
+          <div class="large-mark">Aa</div>
+          <p>选择模式后开始一轮填词。</p>
+        </div>
+
+        <article id="questionCard" class="question-card hidden">
+          <div class="question-topline">
+            <span id="progressText" class="pill quiet">0 / 0</span>
+            <span id="modeText" class="pill neutral">最近 n 词</span>
+          </div>
+          <p id="maskedSentence" class="masked-sentence"></p>
+          <form id="answerForm" class="answer-form">
+            <input
+              id="answerInput"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="补全单词"
+            />
+            <button id="checkBtn" class="primary-btn" type="submit">检查</button>
+          </form>
+          <div id="feedback" class="feedback hidden" aria-live="polite"></div>
+          <div class="question-actions">
+            <button id="prevBtn" class="ghost-btn" type="button">上一题</button>
+            <button id="nextBtn" class="secondary-btn" type="button">下一题</button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

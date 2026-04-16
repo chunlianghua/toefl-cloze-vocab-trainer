@@ -1,0 +1,1 @@
+"""Local TOEFL vocabulary trainer."""
