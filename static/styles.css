@@ -430,11 +430,18 @@ textarea:focus {
 }
 
 .letter-blank {
-  display: inline-block;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
   width: 0.62em;
   height: 0.95em;
+  padding-bottom: 0.04em;
   border-bottom: 0.08em solid currentColor;
   transform: translateY(0.08em);
+}
+
+.letter-blank.filled {
+  color: var(--ink);
 }
 
 .answer-form {

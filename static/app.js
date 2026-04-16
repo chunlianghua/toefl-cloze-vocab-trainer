@@ -73,6 +73,31 @@ function modeLabel(mode = state.mode) {
   return "最近 n 词";
 }
 
+function currentQuestion() {
+  return state.questions[state.index] || null;
+}
+
+function cleanAnswerText(value) {
+  return String(value || "").replace(/[^A-Za-z'-]/g, "");
+}
+
+function previewLetters(question, typed) {
+  const target = (question.parts || []).find((part) => part.type === "target");
+  if (!target) {
+    return "";
+  }
+
+  const clean = cleanAnswerText(typed);
+  const prefix = String(target.prefix || "");
+  const normalizedClean = clean.toLowerCase();
+  const normalizedPrefix = prefix.toLowerCase();
+  const suffix = normalizedClean.startsWith(normalizedPrefix) && clean.length > prefix.length
+    ? clean.slice(prefix.length)
+    : clean;
+
+  return suffix.slice(0, Math.max(1, Number(target.missing_count || 1)));
+}
+
 async function loadStatus() {
   const status = await api("/api/status");
   el.modelInput.value = el.modelInput.value || status.default_model || "qwen3.5-plus";
@@ -178,8 +203,8 @@ function renderQuestion() {
   const savedAnswer = state.answers.get(question.example_id);
   el.progressText.textContent = `${state.index + 1} / ${state.questions.length}`;
   el.modeText.textContent = modeLabel();
-  renderMaskedSentence(question);
   el.answerInput.value = savedAnswer?.typed || "";
+  renderMaskedSentence(question, el.answerInput.value);
   el.answerInput.disabled = Boolean(savedAnswer);
   el.checkBtn.disabled = Boolean(savedAnswer);
   el.prevBtn.disabled = state.index === 0;
@@ -187,10 +212,12 @@ function renderQuestion() {
   renderFeedback(savedAnswer);
   if (!savedAnswer) {
     window.setTimeout(() => el.answerInput.focus(), 0);
+  } else {
+    window.setTimeout(() => el.nextBtn.focus(), 0);
   }
 }
 
-function renderMaskedSentence(question) {
+function renderMaskedSentence(question, typed = "") {
   el.maskedSentence.textContent = "";
   const parts = question.parts || [];
   if (!parts.length) {
@@ -198,6 +225,7 @@ function renderMaskedSentence(question) {
     return;
   }
 
+  const preview = previewLetters(question, typed);
   for (const part of parts) {
     if (part.type !== "target") {
       el.maskedSentence.append(document.createTextNode(part.text || ""));
@@ -218,6 +246,8 @@ function renderMaskedSentence(question) {
     for (let i = 0; i < count; i += 1) {
       const blank = document.createElement("span");
       blank.className = "letter-blank";
+      blank.textContent = preview[i] || "";
+      blank.classList.toggle("filled", Boolean(preview[i]));
       blanks.append(blank);
     }
     target.append(blanks);
@@ -280,6 +310,40 @@ async function checkCurrent(event) {
   }
 }
 
+function updateAnswerPreview() {
+  const question = currentQuestion();
+  if (!question || state.answers.has(question.example_id)) {
+    return;
+  }
+  renderMaskedSentence(question, el.answerInput.value);
+}
+
+function handlePracticeEnter(event) {
+  if (
+    event.key !== "Enter" ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    el.questionCard.classList.contains("hidden")
+  ) {
+    return;
+  }
+
+  const question = currentQuestion();
+  if (!question || !state.answers.has(question.example_id)) {
+    return;
+  }
+
+  const active = document.activeElement;
+  if (active && active.closest && !active.closest(".practice-pane")) {
+    return;
+  }
+
+  event.preventDefault();
+  go(1);
+}
+
 function go(delta) {
   if (!state.questions.length) {
     return;
@@ -322,8 +386,10 @@ function bindEvents() {
   });
   el.startPracticeBtn.addEventListener("click", startPracticeRound);
   el.answerForm.addEventListener("submit", checkCurrent);
+  el.answerInput.addEventListener("input", updateAnswerPreview);
   el.prevBtn.addEventListener("click", () => go(-1));
   el.nextBtn.addEventListener("click", () => go(1));
+  document.addEventListener("keydown", handlePracticeEnter);
   el.wordList.addEventListener("click", (event) => {
     const button = event.target.closest(".delete-btn");
     if (button) {
