@@ -64,7 +64,13 @@ function setBusy(button, busy) {
 }
 
 function modeLabel(mode = state.mode) {
-  return mode === "random" ? "随机 n 词" : "最近 n 词";
+  if (mode === "random") {
+    return "随机 n 词";
+  }
+  if (mode === "weak") {
+    return "最不熟悉 n 词";
+  }
+  return "最近 n 词";
 }
 
 async function loadStatus() {
@@ -93,6 +99,7 @@ function renderWords(words) {
         <div class="word-row" data-id="${item.id}">
           <div class="word-main">${escapeHtml(item.word)}</div>
           <div class="word-meaning">${escapeHtml(item.chinese_meaning)}</div>
+          <span class="pill score">熟练 ${item.proficiency}/10</span>
           <span class="pill quiet">${item.example_count} 句</span>
           <button class="delete-btn" type="button" title="删除" aria-label="删除 ${escapeHtml(
             item.word,
@@ -232,6 +239,7 @@ function renderFeedback(result) {
     <div class="feedback-title ${tone}">
       ${result.correct ? "正确" : "答案"}：${escapeHtml(result.word)}
       <span class="muted"> ${escapeHtml(result.chinese_meaning)}</span>
+      <span class="muted"> 熟练度 ${result.proficiency}/10</span>
     </div>
     <div>${escapeHtml(result.sentence)}</div>
     ${
@@ -263,6 +271,7 @@ async function checkCurrent(event) {
       }),
     });
     state.answers.set(question.example_id, { ...result, typed });
+    await loadWords();
     renderQuestion();
   } catch (error) {
     toast(error.message);

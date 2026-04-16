@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import random
 import sqlite3
 from datetime import datetime, timezone
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Iterator
 
 from .config import DB_PATH, DATA_DIR
 from .errors import AppError
@@ -23,8 +24,21 @@ def connect_db() -> sqlite3.Connection:
     return conn
 
 
+@contextmanager
+def db_session() -> Iterator[sqlite3.Connection]:
+    conn = connect_db()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
-    with connect_db() as conn:
+    with db_session() as conn:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS words (
@@ -32,6 +46,7 @@ def init_db() -> None:
                 word_key TEXT NOT NULL UNIQUE,
                 display_word TEXT NOT NULL,
                 chinese_meaning TEXT NOT NULL,
+                proficiency INTEGER NOT NULL DEFAULT 0,
                 model TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -51,10 +66,31 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_examples_word_id ON examples(word_id);
             """
         )
-        columns = {
+        word_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(words)").fetchall()
+        }
+        if "proficiency" not in word_columns:
+            conn.execute(
+                "ALTER TABLE words ADD COLUMN proficiency INTEGER NOT NULL DEFAULT 0"
+            )
+        conn.execute(
+            """
+            UPDATE words
+            SET proficiency = CASE
+                WHEN proficiency < 0 THEN 0
+                WHEN proficiency > 10 THEN 10
+                ELSE proficiency
+            END
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_words_proficiency ON words(proficiency ASC)"
+        )
+
+        example_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(examples)").fetchall()
         }
-        if "visible_prefix" not in columns:
+        if "visible_prefix" not in example_columns:
             conn.execute(
                 "ALTER TABLE examples ADD COLUMN visible_prefix TEXT NOT NULL DEFAULT ''"
             )
@@ -63,17 +99,18 @@ def init_db() -> None:
 def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     saved: list[dict[str, Any]] = []
     now = utc_now()
-    with connect_db() as conn:
+    with db_session() as conn:
         for item in items:
             word = item["word"].strip()
             key = word.lower()
             meaning = item["chinese_meaning"] or "（模型未返回中文含义）"
             model = item["model"]
             existing = conn.execute(
-                "SELECT id FROM words WHERE word_key = ?", (key,)
+                "SELECT id, proficiency FROM words WHERE word_key = ?", (key,)
             ).fetchone()
             if existing:
                 word_id = int(existing["id"])
+                proficiency = int(existing["proficiency"])
                 conn.execute(
                     """
                     UPDATE words
@@ -86,13 +123,21 @@ def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             else:
                 cursor = conn.execute(
                     """
-                    INSERT INTO words
-                        (word_key, display_word, chinese_meaning, model, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO words (
+                        word_key,
+                        display_word,
+                        chinese_meaning,
+                        proficiency,
+                        model,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, 0, ?, ?, ?)
                     """,
                     (key, word, meaning, model, now, now),
                 )
                 word_id = int(cursor.lastrowid)
+                proficiency = 0
 
             for example in item["examples"]:
                 prefix = normalize_prefix(example["visible_prefix"], word)
@@ -110,6 +155,7 @@ def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "id": word_id,
                     "word": word,
                     "chinese_meaning": meaning,
+                    "proficiency": proficiency,
                     "example_count": len(item["examples"]),
                     "model": model,
                     "updated_at": now,
@@ -119,20 +165,21 @@ def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def get_counts() -> dict[str, int]:
-    with connect_db() as conn:
+    with db_session() as conn:
         word_count = conn.execute("SELECT COUNT(*) FROM words").fetchone()[0]
         example_count = conn.execute("SELECT COUNT(*) FROM examples").fetchone()[0]
     return {"word_count": int(word_count), "example_count": int(example_count)}
 
 
 def list_words() -> list[dict[str, Any]]:
-    with connect_db() as conn:
+    with db_session() as conn:
         rows = conn.execute(
             """
             SELECT
                 w.id,
                 w.display_word AS word,
                 w.chinese_meaning,
+                w.proficiency,
                 w.model,
                 w.created_at,
                 w.updated_at,
@@ -148,14 +195,19 @@ def list_words() -> list[dict[str, Any]]:
 
 def start_practice(mode: str, n: int) -> dict[str, Any]:
     safe_n = max(1, min(int(n or 10), 200))
-    if mode not in {"recent", "random"}:
-        raise AppError(HTTPStatus.BAD_REQUEST, "练习模式必须是 recent 或 random")
+    if mode not in {"recent", "random", "weak"}:
+        raise AppError(HTTPStatus.BAD_REQUEST, "练习模式必须是 recent、random 或 weak")
 
-    order_clause = "w.updated_at DESC, w.id DESC" if mode == "recent" else "RANDOM()"
-    with connect_db() as conn:
+    order_clauses = {
+        "recent": "w.updated_at DESC, w.id DESC",
+        "random": "RANDOM()",
+        "weak": "w.proficiency ASC, w.updated_at ASC, w.id ASC",
+    }
+    order_clause = order_clauses[mode]
+    with db_session() as conn:
         words = conn.execute(
             f"""
-            SELECT w.id, w.display_word AS word, w.chinese_meaning
+            SELECT w.id, w.display_word AS word, w.chinese_meaning, w.proficiency
             FROM words w
             WHERE EXISTS (SELECT 1 FROM examples e WHERE e.word_id = w.id)
             ORDER BY {order_clause}
@@ -186,6 +238,7 @@ def start_practice(mode: str, n: int) -> dict[str, Any]:
                     "example_id": int(example["id"]),
                     "masked_sentence": masked["masked_sentence"],
                     "visible_prefix": masked["visible_prefix"],
+                    "proficiency": int(row["proficiency"]),
                     "parts": masked["parts"],
                 }
             )
@@ -195,36 +248,47 @@ def start_practice(mode: str, n: int) -> dict[str, Any]:
 
 
 def check_question(example_id: int, answer: str, visible_prefix: str) -> dict[str, Any]:
-    with connect_db() as conn:
+    with db_session() as conn:
         row = conn.execute(
             """
             SELECT
                 e.sentence,
                 e.visible_prefix,
+                w.id AS word_id,
                 w.display_word AS word,
-                w.chinese_meaning
+                w.chinese_meaning,
+                w.proficiency
             FROM examples e
             JOIN words w ON w.id = e.word_id
             WHERE e.id = ?
             """,
             (example_id,),
         ).fetchone()
-    if not row:
-        raise AppError(HTTPStatus.NOT_FOUND, "找不到这道题")
+        if not row:
+            raise AppError(HTTPStatus.NOT_FOUND, "找不到这道题")
 
-    prefix = visible_prefix or row["visible_prefix"]
-    correct = check_answer(answer, row["word"], prefix)
+        prefix = visible_prefix or row["visible_prefix"]
+        correct = check_answer(answer, row["word"], prefix)
+        current = int(row["proficiency"])
+        delta = 1 if correct else -5
+        new_proficiency = min(10, max(0, current + delta))
+        conn.execute(
+            "UPDATE words SET proficiency = ? WHERE id = ?",
+            (new_proficiency, int(row["word_id"])),
+        )
+
     return {
         "correct": correct,
         "word": row["word"],
         "chinese_meaning": row["chinese_meaning"],
         "sentence": row["sentence"],
         "visible_prefix": normalize_prefix(prefix, row["word"]),
+        "proficiency": new_proficiency,
     }
 
 
 def delete_word(word_id: int) -> dict[str, Any]:
-    with connect_db() as conn:
+    with db_session() as conn:
         cursor = conn.execute("DELETE FROM words WHERE id = ?", (word_id,))
     if cursor.rowcount == 0:
         raise AppError(HTTPStatus.NOT_FOUND, "找不到这个单词")
