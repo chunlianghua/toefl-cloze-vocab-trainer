@@ -128,7 +128,8 @@ h2 {
 }
 
 .model-field,
-.number-field {
+.number-field,
+.stack-field {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -137,8 +138,29 @@ h2 {
   font-weight: 700;
 }
 
+.config-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.55fr) minmax(180px, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stack-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.stack-field.full-span {
+  grid-column: 1 / -1;
+}
+
 .model-field input,
 .number-field input,
+.stack-field input,
+.stack-field select,
 textarea,
 .answer-form input {
   border: 1px solid var(--line);
@@ -163,6 +185,13 @@ textarea,
   padding: 0 10px;
 }
 
+.stack-field input,
+.stack-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 textarea {
   width: 100%;
   min-height: 210px;
@@ -174,6 +203,8 @@ textarea {
 .answer-form input:focus,
 .model-field input:focus,
 .number-field input:focus,
+.stack-field input:focus,
+.stack-field select:focus,
 textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(35, 100, 170, 0.16);
@@ -547,7 +578,10 @@ textarea:focus {
   }
 
   .model-field,
+  .config-grid,
   .model-field input,
+  .stack-field input,
+  .stack-field select,
   .practice-controls,
   .segmented,
   .secondary-btn,
@@ -558,6 +592,10 @@ textarea:focus {
 
   .practice-controls {
     align-items: stretch;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
   }
 
   .word-row {

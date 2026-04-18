@@ -9,8 +9,8 @@ STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "vocab.sqlite3"
 
-ALIYUN_API_KEY_ENV = "ALIYUN_API_KEY"
-ALIYUN_BASE_URL = os.environ.get(
-    "ALIYUN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-).rstrip("/")
-DEFAULT_MODEL = os.environ.get("ALIYUN_MODEL", "qwen3.5-plus")
+DEFAULT_PROTOCOL = os.environ.get("LLM_PROTOCOL", "openai").strip().lower()
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "qwen3.5-plus").strip()
+DEFAULT_BASE_URL = os.environ.get(
+    "LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+).strip()

@@ -22,9 +22,28 @@
       <section class="pane input-pane" aria-labelledby="addTitle">
         <div class="section-title">
           <h2 id="addTitle">录入单词</h2>
-          <label class="model-field">
+        </div>
+
+        <div class="config-grid">
+          <label class="stack-field">
+            <span>协议</span>
+            <select id="protocolInput">
+              <option value="openai">openai</option>
+              <option value="genai">genai</option>
+              <option value="anthropic">anthropic</option>
+            </select>
+          </label>
+          <label class="stack-field">
             <span>模型</span>
             <input id="modelInput" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="stack-field full-span">
+            <span>Base URL</span>
+            <input id="baseUrlInput" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="stack-field full-span">
+            <span>API Key</span>
+            <input id="apiKeyInput" type="password" autocomplete="off" spellcheck="false" />
           </label>
         </div>
 

@@ -8,7 +8,10 @@ const state = {
 const el = {
   keyStatus: document.querySelector("#keyStatus"),
   countStatus: document.querySelector("#countStatus"),
+  protocolInput: document.querySelector("#protocolInput"),
   modelInput: document.querySelector("#modelInput"),
+  baseUrlInput: document.querySelector("#baseUrlInput"),
+  apiKeyInput: document.querySelector("#apiKeyInput"),
   wordInput: document.querySelector("#wordInput"),
   generateBtn: document.querySelector("#generateBtn"),
   generateState: document.querySelector("#generateState"),
@@ -100,11 +103,11 @@ function previewLetters(question, typed) {
 
 async function loadStatus() {
   const status = await api("/api/status");
+  el.protocolInput.value = el.protocolInput.value || status.default_protocol || "openai";
   el.modelInput.value = el.modelInput.value || status.default_model || "qwen3.5-plus";
-  el.keyStatus.textContent = status.has_api_key
-    ? `${status.api_key_env} 已读取`
-    : `${status.api_key_env} 未读取`;
-  el.keyStatus.className = `pill ${status.has_api_key ? "ok" : "bad"}`;
+  el.baseUrlInput.value = el.baseUrlInput.value || status.default_base_url || "";
+  el.keyStatus.textContent = (status.supported_protocols || ["openai", "genai", "anthropic"]).join(" / ");
+  el.keyStatus.className = "pill neutral";
   el.countStatus.textContent = `${status.word_count} 词 / ${status.example_count} 句`;
 }
 
@@ -137,9 +140,23 @@ function renderWords(words) {
 
 async function generateWords() {
   const words = el.wordInput.value.trim();
+  const protocol = el.protocolInput.value.trim();
+  const model = el.modelInput.value.trim();
+  const baseUrl = el.baseUrlInput.value.trim();
+  const apiKey = el.apiKeyInput.value.trim();
   if (!words) {
     toast("先输入至少一个单词。");
     el.wordInput.focus();
+    return;
+  }
+  if (!model) {
+    toast("先填写模型名称。");
+    el.modelInput.focus();
+    return;
+  }
+  if (!apiKey) {
+    toast("先填写 API Key。");
+    el.apiKeyInput.focus();
     return;
   }
 
@@ -148,7 +165,13 @@ async function generateWords() {
   try {
     const data = await api("/api/generate", {
       method: "POST",
-      body: JSON.stringify({ words, model: el.modelInput.value.trim() }),
+      body: JSON.stringify({
+        words,
+        protocol,
+        model,
+        base_url: baseUrl,
+        api_key: apiKey,
+      }),
     });
     const skipped = data.skipped || [];
     el.wordInput.value = skipped.length ? skipped.map((item) => item.word).join("\n") : "";
@@ -264,10 +287,16 @@ function renderFeedback(result) {
   }
 
   const tone = result.correct ? "correct" : "wrong";
+  const answerLabel = result.answer || result.word;
+  const baseWordHint =
+    result.answer && result.word && result.answer.toLowerCase() !== result.word.toLowerCase()
+      ? `<span class="muted"> 原词 ${escapeHtml(result.word)}</span>`
+      : "";
   el.feedback.classList.add(tone);
   el.feedback.innerHTML = `
     <div class="feedback-title ${tone}">
-      ${result.correct ? "正确" : "答案"}：${escapeHtml(result.word)}
+      ${result.correct ? "正确" : "答案"}：${escapeHtml(answerLabel)}
+      ${baseWordHint}
       <span class="muted"> ${escapeHtml(result.chinese_meaning)}</span>
       <span class="muted"> 熟练度 ${result.proficiency}/10</span>
     </div>

@@ -9,9 +9,9 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
-from .aliyun import api_key_status, generate_words
-from .config import ALIYUN_API_KEY_ENV, ALIYUN_BASE_URL, DEFAULT_MODEL, STATIC_DIR
+from .config import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL, STATIC_DIR
 from .errors import AppError
+from .llm import build_request_config, generate_words
 from .store import (
     check_question,
     delete_word,
@@ -73,10 +73,10 @@ class VocabHandler(BaseHTTPRequestHandler):
             if self.path.startswith("/api/status"):
                 self.send_json(
                     {
-                        "has_api_key": api_key_status(),
-                        "api_key_env": ALIYUN_API_KEY_ENV,
+                        "default_protocol": DEFAULT_PROTOCOL,
                         "default_model": DEFAULT_MODEL,
-                        "base_url": ALIYUN_BASE_URL,
+                        "default_base_url": DEFAULT_BASE_URL,
+                        "supported_protocols": ["openai", "genai", "anthropic"],
                         **get_counts(),
                     }
                 )
@@ -99,9 +99,8 @@ class VocabHandler(BaseHTTPRequestHandler):
                 words = parse_word_input(str(data.get("words", "")))
                 if not words:
                     raise AppError(HTTPStatus.BAD_REQUEST, "请输入至少一个单词")
-                generated, skipped = generate_words(
-                    words, str(data.get("model") or DEFAULT_MODEL)
-                )
+                request_config = build_request_config(data)
+                generated, skipped = generate_words(words, request_config)
                 self.send_json(
                     {
                         "saved": save_generated_items(generated),

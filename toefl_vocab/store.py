@@ -56,6 +56,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 word_id INTEGER NOT NULL,
                 sentence TEXT NOT NULL,
+                answer TEXT NOT NULL DEFAULT '',
                 visible_prefix TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (word_id) REFERENCES words(id) ON DELETE CASCADE,
@@ -90,10 +91,23 @@ def init_db() -> None:
         example_columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(examples)").fetchall()
         }
+        if "answer" not in example_columns:
+            conn.execute("ALTER TABLE examples ADD COLUMN answer TEXT NOT NULL DEFAULT ''")
         if "visible_prefix" not in example_columns:
             conn.execute(
                 "ALTER TABLE examples ADD COLUMN visible_prefix TEXT NOT NULL DEFAULT ''"
             )
+        conn.execute(
+            """
+            UPDATE examples
+            SET answer = (
+                SELECT w.display_word
+                FROM words w
+                WHERE w.id = examples.word_id
+            )
+            WHERE answer = ''
+            """
+        )
 
 
 def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -140,14 +154,20 @@ def save_generated_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 proficiency = 0
 
             for example in item["examples"]:
-                prefix = normalize_prefix(example["visible_prefix"], word)
+                answer = example["answer"].strip()
+                prefix = normalize_prefix(example["visible_prefix"], answer)
                 conn.execute(
                     """
-                    INSERT OR IGNORE INTO examples
-                        (word_id, sentence, visible_prefix, created_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT OR IGNORE INTO examples (
+                        word_id,
+                        sentence,
+                        answer,
+                        visible_prefix,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (word_id, example["sentence"], prefix, now),
+                    (word_id, example["sentence"], answer, prefix, now),
                 )
 
             saved.append(
@@ -221,6 +241,7 @@ def start_practice(mode: str, n: int) -> dict[str, Any]:
             example = conn.execute(
                 """
                 SELECT id, sentence, visible_prefix
+                     , answer
                 FROM examples
                 WHERE word_id = ?
                 ORDER BY RANDOM()
@@ -231,7 +252,7 @@ def start_practice(mode: str, n: int) -> dict[str, Any]:
             if not example:
                 continue
             masked = mask_sentence(
-                example["sentence"], row["word"], example["visible_prefix"]
+                example["sentence"], example["answer"], example["visible_prefix"]
             )
             questions.append(
                 {
@@ -253,6 +274,7 @@ def check_question(example_id: int, answer: str, visible_prefix: str) -> dict[st
             """
             SELECT
                 e.sentence,
+                e.answer,
                 e.visible_prefix,
                 w.id AS word_id,
                 w.display_word AS word,
@@ -268,7 +290,7 @@ def check_question(example_id: int, answer: str, visible_prefix: str) -> dict[st
             raise AppError(HTTPStatus.NOT_FOUND, "找不到这道题")
 
         prefix = visible_prefix or row["visible_prefix"]
-        correct = check_answer(answer, row["word"], prefix)
+        correct = check_answer(answer, row["answer"], prefix)
         current = int(row["proficiency"])
         delta = 1 if correct else -5
         new_proficiency = min(10, max(0, current + delta))
@@ -279,10 +301,11 @@ def check_question(example_id: int, answer: str, visible_prefix: str) -> dict[st
 
     return {
         "correct": correct,
+        "answer": row["answer"],
         "word": row["word"],
         "chinese_meaning": row["chinese_meaning"],
         "sentence": row["sentence"],
-        "visible_prefix": normalize_prefix(prefix, row["word"]),
+        "visible_prefix": normalize_prefix(prefix, row["answer"]),
         "proficiency": new_proficiency,
     }
 

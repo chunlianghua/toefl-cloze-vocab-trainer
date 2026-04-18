@@ -4,8 +4,7 @@ import argparse
 import time
 from http.server import ThreadingHTTPServer
 
-from toefl_vocab.aliyun import api_key_status
-from toefl_vocab.config import ALIYUN_API_KEY_ENV, DB_PATH
+from toefl_vocab.config import DB_PATH, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL
 from toefl_vocab.server import VocabHandler
 from toefl_vocab.store import init_db
 
@@ -24,7 +23,9 @@ def main() -> None:
     server.daemon_threads = True
     print(f"TOEFL vocab trainer: http://{args.host}:{args.port}")
     print(f"Database: {DB_PATH}")
-    print(f"API key env: {ALIYUN_API_KEY_ENV} ({'ok' if api_key_status() else 'missing'})")
+    print(f"Default protocol: {DEFAULT_PROTOCOL}")
+    print(f"Default model: {DEFAULT_MODEL}")
+    print(f"Default base URL: {DEFAULT_BASE_URL or '(provider default)'}")
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
