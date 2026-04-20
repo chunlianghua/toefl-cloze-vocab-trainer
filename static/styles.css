@@ -281,6 +281,31 @@ textarea:focus {
   font-size: 14px;
 }
 
+.error-panel {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff4f2;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-panel.warn {
+  background: #fff9eb;
+  border-color: #f2d38a;
+  color: #8a5a00;
+}
+
+.error-panel.bad {
+  background: #fff4f2;
+  border-color: #f0b4ad;
+  color: var(--danger);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

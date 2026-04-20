@@ -15,6 +15,7 @@ const el = {
   wordInput: document.querySelector("#wordInput"),
   generateBtn: document.querySelector("#generateBtn"),
   generateState: document.querySelector("#generateState"),
+  errorDetail: document.querySelector("#errorDetail"),
   refreshBtn: document.querySelector("#refreshBtn"),
   wordList: document.querySelector("#wordList"),
   modeBtns: document.querySelectorAll(".mode-btn"),
@@ -35,13 +36,26 @@ const el = {
 };
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const requestOptions = {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
-  });
+  };
+
+  let response;
+  try {
+    response = await fetch(path, requestOptions);
+  } catch (error) {
+    console.error(`[API ${requestOptions.method || "GET"} ${path}] network error`, error);
+    throw new Error("网络请求失败，请检查本地服务是否已经启动。");
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = data.details ? `\n${data.details}` : "";
+    console.error(`[API ${requestOptions.method || "GET"} ${path}]`, {
+      status: response.status,
+      payload: data,
+    });
     throw new Error(`${data.error || "请求失败"}${detail}`);
   }
   return data;
@@ -59,6 +73,30 @@ function toast(message) {
   el.toast.classList.remove("hidden");
   window.clearTimeout(toast.timer);
   toast.timer = window.setTimeout(() => el.toast.classList.add("hidden"), 3200);
+}
+
+function showErrorDetail(message, tone = "bad") {
+  if (!message) {
+    clearErrorDetail();
+    return;
+  }
+  el.errorDetail.textContent = message;
+  el.errorDetail.classList.remove("hidden", "warn", "bad");
+  el.errorDetail.classList.add(tone === "warn" ? "warn" : "bad");
+}
+
+function clearErrorDetail() {
+  el.errorDetail.textContent = "";
+  el.errorDetail.classList.add("hidden");
+  el.errorDetail.classList.remove("warn", "bad");
+}
+
+function logClientError(scope, error, extra = null) {
+  if (extra) {
+    console.error(`[${scope}]`, error, extra);
+    return;
+  }
+  console.error(`[${scope}]`, error);
 }
 
 function setBusy(button, busy) {
@@ -103,11 +141,17 @@ function previewLetters(question, typed) {
 
 async function loadStatus() {
   const status = await api("/api/status");
-  el.protocolInput.value = el.protocolInput.value || status.default_protocol || "openai";
-  el.modelInput.value = el.modelInput.value || status.default_model || "qwen3.5-plus";
+  el.protocolInput.value = el.protocolInput.value || status.default_protocol || "genai";
+  el.modelInput.value =
+    el.modelInput.value || status.default_model || "gemini-3-flash-preview-free";
   el.baseUrlInput.value = el.baseUrlInput.value || status.default_base_url || "";
-  el.keyStatus.textContent = (status.supported_protocols || ["openai", "genai", "anthropic"]).join(" / ");
-  el.keyStatus.className = "pill neutral";
+  el.apiKeyInput.value = el.apiKeyInput.value || status.default_api_key || "";
+  const protocols = (status.supported_protocols || ["openai", "genai", "anthropic"]).join(" / ");
+  const keyNote = status.default_api_key
+    ? `${status.default_api_key_env} 已读取`
+    : `${status.default_api_key_env} 未读取`;
+  el.keyStatus.textContent = `${protocols} | ${keyNote}`;
+  el.keyStatus.className = `pill ${status.default_api_key ? "ok" : "neutral"}`;
   el.countStatus.textContent = `${status.word_count} 词 / ${status.example_count} 句`;
 }
 
@@ -138,6 +182,18 @@ function renderWords(words) {
     .join("");
 }
 
+function formatSkippedMessage(skipped) {
+  return skipped
+    .map((item, index) => {
+      const lines = [`${index + 1}. ${item.word}: ${item.error || "已跳过"}`];
+      if (item.details) {
+        lines.push(item.details);
+      }
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
 async function generateWords() {
   const words = el.wordInput.value.trim();
   const protocol = el.protocolInput.value.trim();
@@ -162,6 +218,7 @@ async function generateWords() {
 
   setBusy(el.generateBtn, true);
   el.generateState.textContent = "生成中...";
+  clearErrorDetail();
   try {
     const data = await api("/api/generate", {
       method: "POST",
@@ -173,15 +230,27 @@ async function generateWords() {
         api_key: apiKey,
       }),
     });
+
     const skipped = data.skipped || [];
     el.wordInput.value = skipped.length ? skipped.map((item) => item.word).join("\n") : "";
     el.generateState.textContent = skipped.length
       ? `已保存 ${data.saved.length} 个，跳过 ${skipped.length} 个`
       : `已保存 ${data.saved.length} 个单词`;
+
+    if (skipped.length) {
+      const skippedMessage = formatSkippedMessage(skipped);
+      showErrorDetail(`以下单词没有成功生成：\n\n${skippedMessage}`, "warn");
+      console.warn("[generateWords] skipped words", skipped);
+    } else {
+      clearErrorDetail();
+    }
+
     await Promise.all([loadStatus(), loadWords()]);
     toast(skipped.length ? "部分单词已跳过，输入框里保留了可重试的词。" : "例句已经保存。");
   } catch (error) {
-    el.generateState.textContent = "";
+    logClientError("generateWords", error);
+    el.generateState.textContent = "生成失败";
+    showErrorDetail(error.message, "bad");
     toast(error.message);
   } finally {
     setBusy(el.generateBtn, false);
@@ -209,6 +278,7 @@ async function startPracticeRound() {
     el.questionCard.classList.remove("hidden");
     renderQuestion();
   } catch (error) {
+    logClientError("startPracticeRound", error);
     toast(error.message);
   } finally {
     setBusy(el.startPracticeBtn, false);
@@ -235,8 +305,6 @@ function renderQuestion() {
   renderFeedback(savedAnswer);
   if (!savedAnswer) {
     window.setTimeout(() => el.answerInput.focus(), 0);
-  } else {
-    window.setTimeout(() => el.nextBtn.focus(), 0);
   }
 }
 
@@ -292,6 +360,7 @@ function renderFeedback(result) {
     result.answer && result.word && result.answer.toLowerCase() !== result.word.toLowerCase()
       ? `<span class="muted"> 原词 ${escapeHtml(result.word)}</span>`
       : "";
+
   el.feedback.classList.add(tone);
   el.feedback.innerHTML = `
     <div class="feedback-title ${tone}">
@@ -333,6 +402,7 @@ async function checkCurrent(event) {
     await loadWords();
     renderQuestion();
   } catch (error) {
+    logClientError("checkCurrent", error);
     toast(error.message);
   } finally {
     setBusy(el.checkBtn, false);
@@ -365,7 +435,9 @@ function handlePracticeEnter(event) {
   }
 
   const active = document.activeElement;
-  if (active && active.closest && !active.closest(".practice-pane")) {
+  const isPageBody =
+    active === document.body || active === document.documentElement || active == null;
+  if (!isPageBody && active && active.closest && !active.closest(".practice-pane")) {
     return;
   }
 
@@ -397,6 +469,7 @@ async function deleteWord(row) {
     await Promise.all([loadStatus(), loadWords()]);
     toast("已删除。");
   } catch (error) {
+    logClientError("deleteWord", error);
     toast(error.message);
   }
 }
@@ -404,8 +477,13 @@ async function deleteWord(row) {
 function bindEvents() {
   el.generateBtn.addEventListener("click", generateWords);
   el.refreshBtn.addEventListener("click", async () => {
-    await Promise.all([loadStatus(), loadWords()]);
-    toast("词本已刷新。");
+    try {
+      await Promise.all([loadStatus(), loadWords()]);
+      toast("词本已刷新。");
+    } catch (error) {
+      logClientError("refreshWords", error);
+      toast(error.message);
+    }
   });
   el.modeBtns.forEach((button) => {
     button.addEventListener("click", () => {
@@ -432,6 +510,8 @@ async function boot() {
   try {
     await Promise.all([loadStatus(), loadWords()]);
   } catch (error) {
+    logClientError("boot", error);
+    showErrorDetail(error.message, "bad");
     toast(error.message);
   }
 }

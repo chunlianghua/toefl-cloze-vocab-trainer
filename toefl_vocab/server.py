@@ -9,7 +9,14 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
-from .config import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL, STATIC_DIR
+from .config import (
+    DEFAULT_API_KEY,
+    DEFAULT_API_KEY_ENV,
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    DEFAULT_PROTOCOL,
+    STATIC_DIR,
+)
 from .errors import AppError
 from .llm import build_request_config, generate_words
 from .store import (
@@ -54,10 +61,33 @@ class VocabHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_error_json(self, error: AppError) -> None:
+        summary = " ".join(error.message.split())
+        details = " ".join((error.details or "").split())
+        if details:
+            self.log_message(
+                'API error %s %s -> %s "%s" | %s',
+                self.command,
+                self.path,
+                int(error.status),
+                summary,
+                details[:1200],
+            )
+        else:
+            self.log_message(
+                'API error %s %s -> %s "%s"',
+                self.command,
+                self.path,
+                int(error.status),
+                summary,
+            )
+
         payload = {"error": error.message}
         if error.details:
             payload["details"] = error.details
         self.send_json(payload, error.status)
+
+    def log_unhandled_exception(self, exc: Exception) -> None:
+        self.log_message("Unhandled exception on %s %s: %r", self.command, self.path, exc)
 
     def do_GET(self) -> None:
         try:
@@ -76,6 +106,8 @@ class VocabHandler(BaseHTTPRequestHandler):
                         "default_protocol": DEFAULT_PROTOCOL,
                         "default_model": DEFAULT_MODEL,
                         "default_base_url": DEFAULT_BASE_URL,
+                        "default_api_key": DEFAULT_API_KEY,
+                        "default_api_key_env": DEFAULT_API_KEY_ENV,
                         "supported_protocols": ["openai", "genai", "anthropic"],
                         **get_counts(),
                     }
@@ -90,6 +122,7 @@ class VocabHandler(BaseHTTPRequestHandler):
         except AppError as exc:
             self.send_error_json(exc)
         except Exception as exc:  # pragma: no cover
+            self.log_unhandled_exception(exc)
             self.send_error_json(AppError(HTTPStatus.INTERNAL_SERVER_ERROR, "服务器内部错误", str(exc)))
 
     def do_POST(self) -> None:
@@ -101,6 +134,13 @@ class VocabHandler(BaseHTTPRequestHandler):
                     raise AppError(HTTPStatus.BAD_REQUEST, "请输入至少一个单词")
                 request_config = build_request_config(data)
                 generated, skipped = generate_words(words, request_config)
+                if skipped:
+                    self.log_message(
+                        "Generate skipped %s/%s words: %s",
+                        len(skipped),
+                        len(words),
+                        json.dumps(skipped, ensure_ascii=False)[:1600],
+                    )
                 self.send_json(
                     {
                         "saved": save_generated_items(generated),
@@ -132,6 +172,7 @@ class VocabHandler(BaseHTTPRequestHandler):
         except AppError as exc:
             self.send_error_json(exc)
         except Exception as exc:  # pragma: no cover
+            self.log_unhandled_exception(exc)
             self.send_error_json(AppError(HTTPStatus.INTERNAL_SERVER_ERROR, "服务器内部错误", str(exc)))
 
     def do_DELETE(self) -> None:
@@ -143,6 +184,7 @@ class VocabHandler(BaseHTTPRequestHandler):
         except AppError as exc:
             self.send_error_json(exc)
         except Exception as exc:  # pragma: no cover
+            self.log_unhandled_exception(exc)
             self.send_error_json(AppError(HTTPStatus.INTERNAL_SERVER_ERROR, "服务器内部错误", str(exc)))
 
     def serve_static(self, target: Path) -> None:

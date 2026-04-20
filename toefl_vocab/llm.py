@@ -7,7 +7,7 @@ import re
 from http import HTTPStatus
 from typing import Any
 
-from .config import DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL
+from .config import DEFAULT_API_KEY, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL
 from .errors import AppError
 from .utils import normalize_prefix, word_pattern
 
@@ -41,9 +41,9 @@ def build_request_config(data: dict[str, Any]) -> dict[str, str]:
     else:
         base_url = str(raw_base_url).strip()
 
-    api_key = str(data.get("api_key") or "").strip()
+    api_key = str(data.get("api_key") or DEFAULT_API_KEY).strip()
     if not api_key:
-        raise AppError(HTTPStatus.BAD_REQUEST, "请输入 API Key")
+        raise AppError(HTTPStatus.BAD_REQUEST, "请输入 API Key，或设置 AIHUBMIX_API_KEY")
 
     return {
         "protocol": protocol,

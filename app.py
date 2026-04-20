@@ -4,7 +4,14 @@ import argparse
 import time
 from http.server import ThreadingHTTPServer
 
-from toefl_vocab.config import DB_PATH, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROTOCOL
+from toefl_vocab.config import (
+    DB_PATH,
+    DEFAULT_API_KEY,
+    DEFAULT_API_KEY_ENV,
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    DEFAULT_PROTOCOL,
+)
 from toefl_vocab.server import VocabHandler
 from toefl_vocab.store import init_db
 
@@ -26,6 +33,10 @@ def main() -> None:
     print(f"Default protocol: {DEFAULT_PROTOCOL}")
     print(f"Default model: {DEFAULT_MODEL}")
     print(f"Default base URL: {DEFAULT_BASE_URL or '(provider default)'}")
+    print(
+        f"Default API key: {DEFAULT_API_KEY_ENV} "
+        f"({'ok' if DEFAULT_API_KEY else 'missing'})"
+    )
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
