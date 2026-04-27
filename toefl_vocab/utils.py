@@ -24,28 +24,30 @@ def word_pattern(word: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![A-Za-z])({escaped})(?![A-Za-z])", re.IGNORECASE)
 
 
+def min_hidden_count(word: str) -> int:
+    return max(1, (len(word) + 1) // 2)
+
+
+def max_visible_prefix_length(word: str) -> int:
+    return max(0, len(word) - min_hidden_count(word))
+
+
 def fallback_prefix(word: str) -> str:
-    length = len(word)
-    if length <= 2:
-        return word[:1]
-    if length <= 5:
-        return word[: max(2, length - 2)]
-    if length <= 8:
-        return word[: min(length - 1, max(2, length // 2))]
-    return word[: min(length - 1, min(6, max(4, length // 2)))]
+    return word[: max_visible_prefix_length(word)]
 
 
 def normalize_prefix(prefix: str, answer: str) -> str:
     clean = re.sub(r"[^A-Za-z'-]", "", str(prefix or "")).lower()
     answer_lower = answer.lower()
-    if 1 <= len(clean) < len(answer) and answer_lower.startswith(clean):
+    max_visible = max_visible_prefix_length(answer)
+    if 0 <= len(clean) <= max_visible and answer_lower.startswith(clean):
         return answer[: len(clean)]
     return fallback_prefix(answer)
 
 
 def target_text(prefix: str, missing_count: int) -> str:
     blanks = " ".join("_" for _ in range(max(1, missing_count)))
-    return f"{prefix} {blanks}"
+    return f"{prefix} {blanks}".strip()
 
 
 def mask_sentence(sentence: str, answer: str, visible_prefix: str) -> dict[str, Any]:
