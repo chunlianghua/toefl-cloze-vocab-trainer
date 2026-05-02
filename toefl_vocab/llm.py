@@ -75,8 +75,6 @@ def build_prompt(word: str) -> tuple[str, str]:
             "为每条例句设计 visible_prefix，即考试中显示的目标词开头部分。",
             "visible_prefix 必须是 answer 从第一个字母开始的连续前缀。",
             "visible_prefix 不能等于完整 answer，也不能让答案显得过于明显。",
-            "被遮挡的字母数量必须大于等于 answer 总字母数的一半；如果总字母数是奇数，则按向上取整计算。",
-            "换句话说，visible_prefix 最多只能保留 answer 前半部分字母，不能超过一半。",
             "不要机械固定字母数；请按 answer 的长度、词根、音节、拼写难度和相近词混淆度判断。",
             "目标是模拟真实填词题里自然、合理的字母提示结构。",
         ],
