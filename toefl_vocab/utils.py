@@ -25,7 +25,7 @@ def word_pattern(word: str) -> re.Pattern[str]:
 
 
 def min_hidden_count(word: str) -> int:
-    return max(1, (len(word) + 1) // 2)
+    return 1
 
 
 def max_visible_prefix_length(word: str) -> int:
